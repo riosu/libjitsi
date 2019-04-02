@@ -42,7 +42,7 @@ public class TlsServerImpl
     private final CertificateRequest certificateRequest
         = new CertificateRequest(
                 new short[] { ClientCertificateType.rsa_sign },
-                /* supportedSignatureAlgorithms */ null,
+                TlsUtils.getDefaultSupportedSignatureAlgorithms(),
                 /* certificateAuthorities */ null);
 
     /**
@@ -67,6 +67,11 @@ public class TlsServerImpl
      * @see DefaultTlsServer#getRSASignerCredentials()
      */
     private TlsSignerCredentials rsaSignerCredentials;
+
+    /**
+     * The `SrtpKeyingMaterial` where using in DtlsPacketTransformer
+     */
+    public byte[] srtpKeyingMaterial;
 
     /**
      * Initializes a new <tt>TlsServerImpl</tt> instance.
@@ -163,7 +168,7 @@ public class TlsServerImpl
     @Override
     protected ProtocolVersion getMaximumVersion()
     {
-        return ProtocolVersion.DTLSv10;
+        return ProtocolVersion.DTLSv12;
     }
 
     /**
@@ -480,5 +485,40 @@ public class TlsServerImpl
                 super.processClientExtensions(clientExtensions);
             }
         }
+    }
+
+    public void notifyHandshakeComplete() throws IOException
+    {
+        super.notifyHandshakeComplete();
+        
+        int cipher_key_length;
+        int cipher_salt_length;
+        switch (getChosenProtectionProfile())
+        {
+        case SRTPProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_32:
+            cipher_key_length = 128 / 8;
+            cipher_salt_length = 112 / 8;
+            break;
+        case SRTPProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_80:
+            cipher_key_length = 128 / 8;
+            cipher_salt_length = 112 / 8;
+            break;
+        case SRTPProtectionProfile.SRTP_NULL_HMAC_SHA1_32:
+            cipher_key_length = 0;
+            cipher_salt_length = 0;
+            break;
+        case SRTPProtectionProfile.SRTP_NULL_HMAC_SHA1_80:
+            cipher_key_length = 0;
+            cipher_salt_length = 0;
+            break;
+        default:
+            throw new IllegalArgumentException("srtpProtectionProfile");
+        }
+
+        srtpKeyingMaterial = getContext().exportKeyingMaterial(
+            ExporterLabel.dtls_srtp,
+            null,
+            2 * (cipher_key_length + cipher_salt_length)
+        );
     }
 }

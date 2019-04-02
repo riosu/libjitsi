@@ -576,7 +576,8 @@ public class DtlsPacketTransformer
      */
     private SinglePacketTransformer initializeSRTPTransformer(
             int srtpProtectionProfile,
-            TlsContext tlsContext)
+            TlsContext tlsContext,
+            TlsPeer tlsPeer)
     {
         boolean rtcp;
 
@@ -663,12 +664,18 @@ public class DtlsPacketTransformer
         }
         else
         {
-            // Original, BouncyCastle 1.54-compatible code.
-            keyingMaterial
-                    = tlsContext.exportKeyingMaterial(
-                    ExporterLabel.dtls_srtp,
-                    null,
-                    2 * (cipher_key_length + cipher_salt_length) );
+            if (tlsPeer instanceof TlsServerImpl) {
+                TlsServerImpl tlsServer = (TlsServerImpl) tlsPeer;
+                keyingMaterial = tlsServer.srtpKeyingMaterial;
+
+            } else {
+                // Original, BouncyCastle 1.54-compatible code.
+                keyingMaterial
+                        = tlsContext.exportKeyingMaterial(
+                        ExporterLabel.dtls_srtp,
+                        null,
+                        2 * (cipher_key_length + cipher_salt_length) );
+            }
         }
         byte[] client_write_SRTP_master_key = new byte[cipher_key_length];
         byte[] server_write_SRTP_master_key = new byte[cipher_key_length];
@@ -1081,7 +1088,7 @@ public class DtlsPacketTransformer
         SinglePacketTransformer srtpTransformer
             = (dtlsTransport == null || !srtp)
                 ? null
-                : initializeSRTPTransformer(srtpProtectionProfile, tlsContext);
+                : initializeSRTPTransformer(srtpProtectionProfile, tlsContext, tlsPeer);
         boolean closeSRTPTransformer;
 
         synchronized (this)
